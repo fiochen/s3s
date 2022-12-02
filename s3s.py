@@ -10,6 +10,7 @@ from subprocess import call
 import msgpack
 from packaging import version
 import iksm, utils
+import obs
 
 A_VERSION = "0.3.4"
 
@@ -1131,8 +1132,9 @@ def post_result(data, ismonitoring, isblackout, istestrun, overview_data=None):
 	'''Uploads battle/job JSON to stat.ink, and prints the returned URL or error message.'''
 
 	if len(API_KEY) != 43:
-		print("\nCannot post to stat.ink without a valid API key set in config.txt. Exiting.")
-		sys.exit(0)
+		# print("\nCannot post to stat.ink without a valid API key set in config.txt. Exiting.")
+		# sys.exit(0)
+		return
 
 	if isinstance(data, list): # -o export format
 		try:
@@ -1230,7 +1232,7 @@ def check_for_updates():
 	'''Checks the script version against the repo, reminding users to update if available.'''
 
 	try:
-		latest_script = requests.get("https://raw.githubusercontent.com/frozenpandaman/s3s/master/s3s.py")
+		latest_script = requests.get("https://raw.fastgit.org/frozenpandaman/s3s/master/s3s.py")
 		new_version = re.search(r'A_VERSION = "([\d.]*)"', latest_script.text).group(1)
 		update_available = version.parse(new_version) > version.parse(A_VERSION)
 		if update_available:
@@ -1240,8 +1242,10 @@ def check_for_updates():
 				if update_now == "" or update_now[0].lower() == "y":
 					FNULL = open(os.devnull, "w")
 					call(["git", "checkout", "."], stdout=FNULL, stderr=FNULL)
-					call(["git", "checkout", "master"], stdout=FNULL, stderr=FNULL)
+					call(["git", "checkout", "base"], stdout=FNULL, stderr=FNULL)
 					call(["git", "pull"], stdout=FNULL, stderr=FNULL)
+					call(["git", "checkout", "master"], stdout=FNULL, stderr=FNULL)
+					call(["git", "rebase", "base"], stdout=FNULL, stderr=FNULL)
 					print(f"Successfully updated to v{new_version}. Please restart s3s.")
 					sys.exit(0)
 				else:
@@ -1498,6 +1502,7 @@ def check_for_new_results(which, cached_battles, cached_jobs, battle_wins, battl
 					print(f"New battle result detected at {dt}! ({shortname}, {outcome})")
 				cached_battles.append(num)
 				post_result(result, True, isblackout, istestrun) # True = is monitoring mode
+				obs.post_result(result, isblackout)
 
 	if which in ("both", "salmon"):
 		for num in reversed(salmon_results):
@@ -1505,7 +1510,7 @@ def check_for_new_results(which, cached_battles, cached_jobs, battle_wins, battl
 				# get the full job data
 				result_post = requests.post(utils.GRAPHQL_URL,
 					data=utils.gen_graphql_body(utils.translate_rid["CoopHistoryDetailQuery"], "coopHistoryDetailId", num),
-					headers=headbutt(forcelang='en-US'),
+					headers=headbutt(),
 					cookies=dict(_gtoken=GTOKEN))
 				result = json.loads(result_post.text)
 
@@ -1528,6 +1533,7 @@ def check_for_new_results(which, cached_battles, cached_jobs, battle_wins, battl
 					print(f"New job result detected at {dt}! ({shortname}, {outcome})")
 					cached_jobs.append(num)
 					post_result(result, True, isblackout, istestrun) # True = is monitoring mode
+					obs.post_result(result, isblackout)
 
 	return which, cached_battles, cached_jobs, battle_wins, battle_losses, battle_draws, splatfest_wins, splatfest_losses, splatfest_draws, mirror_matches, job_successes, job_failures, foundany
 
@@ -1584,13 +1590,13 @@ def monitor_battles(which, secs, isblackout, istestrun, skipprefetch):
 			job_successes, job_failures,
 			isblackout, istestrun
 		]
-		which, cached_battles, cached_jobs, battle_wins, battle_losses, battle_draws, splatfest_wins, splatfest_losses, splatfest_draws, mirror_matches, job_successes, job_failures, foundany = check_for_new_results(*input_params)
+		# which, cached_battles, cached_jobs, battle_wins, battle_losses, battle_draws, splatfest_wins, splatfest_losses, splatfest_draws, mirror_matches, job_successes, job_failures, foundany = check_for_new_results(*input_params)
 
-		noun = utils.set_noun(which)
-		if foundany:
-			print(f"Successfully uploaded remaining {noun}.")
-		else:
-			print(f"No remaining {noun} found.")
+		# noun = utils.set_noun(which)
+		# if foundany:
+		# 	print(f"Successfully uploaded remaining {noun}.")
+		# else:
+		# 	print(f"No remaining {noun} found.")
 
 		# SR TODO - update_salmon_profile()
 
@@ -1794,8 +1800,8 @@ def main():
 		if secs < 0:
 			print("No.")
 			sys.exit(0)
-		elif secs < 60:
-			print("Minimum number of seconds in monitoring mode is 60. Exiting.")
+		elif secs < 10:
+			print("Minimum number of seconds in monitoring mode is 10. Exiting.")
 			sys.exit(0)
 
 	# export results to file: -o flag
